@@ -161,24 +161,31 @@ document.addEventListener('DOMContentLoaded', () => {
         if (appState.aiProvider === 'azure') {
             logActivity(`Iniciando chamada para a Azure OpenAI (${appState.azureDeployment})...`);
             try {
-                const responseText = await fetchAzureOpenAI(text);
+                const { text: responseText, imageUrl } = await fetchAzureOpenAI(text);
                 removeBotShimmer(loadingId);
-                appendBotMessageWithTyping(responseText);
-                logActivity(`Resposta recebida com sucesso da Azure OpenAI.`);
+                appendBotMessageWithTyping(responseText, imageUrl);
+                logActivity(`Resposta recebida com sucesso da Azure OpenAI.${imageUrl ? ' Imagem carregada.' : ''}`);
             } catch (error) {
                 removeBotShimmer(loadingId);
-                const errorMessage = `**Erro ao conectar com o recurso do Azure OpenAI:**\n\n- Detalhe: ${error.message}\n\n*Nota: Chamadas diretas do navegador para a Azure podem ser bloqueadas por política de CORS. Para uso em produção, recomenda-se criar uma rota serverless no Vercel (como explicado no menu de ajuda).* \n\n**Retornando resposta simulada (fallback):**\n\n${getMockResponse(text)}`;
-                appendBotMessageWithTyping(errorMessage);
+                const errorMessage = `**Erro ao conectar com o recurso do Azure OpenAI:**\n\n- Detalhe: ${error.message}\n\n**Retornando resposta simulada (fallback):**\n\n${getMockResponse(text)}`;
+                appendBotMessageWithTyping(errorMessage, null);
                 logActivity(`Falha na chamada da Azure: ${error.message}. Fallback simulado ativo.`);
             }
         } else {
-            // Simulate API call to Azure (Fallback)
-            setTimeout(() => {
+            // Simulate API call (Fallback) + buscar imagem relevante
+            const responseText = getMockResponse(text);
+            const imageKeywords = extractImageKeywords(text);
+            logActivity(`Buscando imagem para: "${imageKeywords || 'N/A'}"...`);
+
+            // Buscar imagem e resposta em paralelo
+            const imagePromise = imageKeywords ? fetchRelevantImage(imageKeywords) : Promise.resolve(null);
+            const delayPromise = new Promise(resolve => setTimeout(resolve, 1200));
+
+            Promise.all([imagePromise, delayPromise]).then(([imgUrl]) => {
                 removeBotShimmer(loadingId);
-                const responseText = getMockResponse(text);
-                appendBotMessageWithTyping(responseText);
-                logActivity(`Resposta simulada gerada com sucesso.`);
-            }, 1200);
+                appendBotMessageWithTyping(responseText, imgUrl);
+                logActivity(`Resposta simulada gerada com sucesso.${imgUrl ? ' Imagem carregada.' : ''}`);
+            });
         }
     }
 
@@ -224,16 +231,29 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function appendBotMessageWithTyping(markdownText) {
+    function appendBotMessageWithTyping(markdownText, imageUrl = null) {
         const messageDiv = document.createElement('div');
         messageDiv.className = 'message bot';
-        
-        // Structure the message elements
+
+        // Build image HTML if available
+        const imageHTML = imageUrl ? `
+            <div class="response-image-wrapper" style="opacity:0; transform:translateY(10px); transition: opacity 0.5s ease, transform 0.5s ease;">
+                <img
+                    class="response-image"
+                    src="${imageUrl}"
+                    alt="Imagem ilustrativa"
+                    loading="lazy"
+                    onerror="this.closest('.response-image-wrapper').remove()"
+                />
+                <div class="response-image-overlay"></div>
+            </div>` : '';
+
         messageDiv.innerHTML = `
             <div class="message-icon">
                 <span class="material-symbols-outlined">auto_awesome</span>
             </div>
             <div class="message-content-wrapper">
+                ${imageHTML}
                 <div class="message-content"></div>
                 <div class="message-actions" style="opacity: 0;">
                     <button class="btn-icon" title="Gostei"><span class="material-symbols-outlined">thumb_up</span></button>
@@ -243,25 +263,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             </div>
         `;
-        
+
         messagesContainer.appendChild(messageDiv);
         const contentDiv = messageDiv.querySelector('.message-content');
         const actionsDiv = messageDiv.querySelector('.message-actions');
+        const imgWrapper  = messageDiv.querySelector('.response-image-wrapper');
 
-        // Render markdown to full HTML content
+        // Fade in image first, then reveal text
+        if (imgWrapper) {
+            requestAnimationFrame(() => {
+                setTimeout(() => {
+                    imgWrapper.style.opacity = '1';
+                    imgWrapper.style.transform = 'translateY(0)';
+                    scrollToBottom();
+                }, 80);
+            });
+        }
+
+        // Render markdown
         const parsedHTML = formatMarkdown(markdownText);
-        
-        // We will do a word-by-word reveal typing effect on the parsed HTML!
-        // To do this simply without breaking tag syntax, we can render the elements gradually 
-        // or simulate typing by inserting content and showing it.
-        // Let's use a robust tag-aware typewriter or a simple progressive text renderer.
-        // Simple and robust approach: append HTML immediately, but use opacity/fade transitions or reveal line-by-line.
-        // Better: typewrite paragraphs and lists smoothly.
-        // Let's implement a clean word-by-word typing effect:
-        
         contentDiv.innerHTML = parsedHTML;
-        
-        // Make sure all elements in contentDiv start hidden, and then reveal them smoothly
+
+        // Reveal paragraphs progressively
         const allParagraphs = contentDiv.querySelectorAll('p, li, pre, ul, ol');
         allParagraphs.forEach(el => {
             el.style.opacity = '0';
@@ -269,6 +292,7 @@ document.addEventListener('DOMContentLoaded', () => {
             el.style.transition = 'opacity 0.25s ease-out, transform 0.25s ease-out';
         });
 
+        const imageDelay = imageUrl ? 400 : 0;
         let index = 0;
         function revealNextElement() {
             if (index < allParagraphs.length) {
@@ -278,13 +302,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 scrollToBottom();
                 setTimeout(revealNextElement, 150);
             } else {
-                // Fade in action buttons at the end
                 actionsDiv.style.transition = 'opacity 0.3s ease-out';
                 actionsDiv.style.opacity = '1';
             }
         }
-        
-        revealNextElement();
+
+        setTimeout(revealNextElement, imageDelay);
         scrollToBottom();
         conversationHistory.push({ role: 'assistant', content: markdownText });
     }
@@ -420,6 +443,109 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Falha ao copiar:', err);
         });
     };
+
+    // --- Client-side Image Search (Wikipedia API) ---
+    async function fetchRelevantImage(query) {
+        if (!query || query.trim().length < 2) return null;
+
+        try {
+            // Tentar busca direta pela página
+            const encodedQuery = encodeURIComponent(query.trim());
+            let response = await fetch(
+                `https://en.wikipedia.org/api/rest_v1/page/summary/${encodedQuery}`,
+                { headers: { 'Api-User-Agent': 'GeminiAzureAssistant/1.0' } }
+            );
+
+            // Se não encontrou, tentar busca textual
+            if (!response.ok) {
+                const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodedQuery}&format=json&srlimit=1&origin=*`;
+                const searchResp = await fetch(searchUrl);
+                if (!searchResp.ok) return null;
+
+                const searchData = await searchResp.json();
+                const firstResult = searchData.query?.search?.[0];
+                if (!firstResult) return null;
+
+                const title = encodeURIComponent(firstResult.title);
+                response = await fetch(
+                    `https://en.wikipedia.org/api/rest_v1/page/summary/${title}`,
+                    { headers: { 'Api-User-Agent': 'GeminiAzureAssistant/1.0' } }
+                );
+                if (!response.ok) return null;
+            }
+
+            const pageData = await response.json();
+
+            if (pageData.originalimage?.source) {
+                return pageData.originalimage.source;
+            }
+            if (pageData.thumbnail?.source) {
+                return pageData.thumbnail.source.replace(/\/\d+px-/, '/800px-');
+            }
+        } catch (e) {
+            console.warn('Erro ao buscar imagem:', e);
+        }
+
+        return null;
+    }
+
+    // Extrair palavras-chave relevantes para busca de imagem
+    function extractImageKeywords(text) {
+        const lower = text.toLowerCase();
+
+        // Mapa de keywords comuns em português → termo de busca em inglês
+        const keywordMap = {
+            'azure': 'Microsoft Azure cloud',
+            'microsoft': 'Microsoft corporation',
+            'github': 'GitHub',
+            'vercel': 'Vercel',
+            'node.js': 'Node.js programming',
+            'javascript': 'JavaScript programming',
+            'python': 'Python programming',
+            'inteligência artificial': 'artificial intelligence',
+            'machine learning': 'machine learning',
+            'gato': 'cat',
+            'cachorro': 'dog',
+            'brasil': 'Brazil',
+            'rio de janeiro': 'Rio de Janeiro',
+            'são paulo': 'São Paulo',
+            'elon musk': 'Elon Musk',
+            'google': 'Google',
+            'apple': 'Apple Inc',
+            'openai': 'OpenAI',
+            'chatgpt': 'ChatGPT',
+            'serverless': 'serverless computing',
+            'docker': 'Docker container',
+            'linux': 'Linux',
+            'windows': 'Microsoft Windows',
+        };
+
+        for (const [key, value] of Object.entries(keywordMap)) {
+            if (lower.includes(key)) return value;
+        }
+
+        // Tentar extrair substantivos principais (heurística simples)
+        // Remove palavras comuns em português
+        const stopWords = ['me', 'o', 'a', 'os', 'as', 'um', 'uma', 'que', 'de', 'do', 'da', 'dos', 'das',
+            'em', 'no', 'na', 'nos', 'nas', 'por', 'para', 'com', 'como', 'sobre', 'entre',
+            'fale', 'explique', 'conte', 'diga', 'descreva', 'qual', 'quais', 'quem',
+            'é', 'são', 'foi', 'era', 'ser', 'estar', 'ter', 'fazer', 'pode', 'posso',
+            'ajude', 'escreva', 'crie', 'mostre', 'mim', 'eu', 'você', 'ele', 'ela',
+            'isso', 'isto', 'esse', 'essa', 'aquele', 'aquela', 'muito', 'mais', 'menos',
+            'bem', 'mal', 'sim', 'não', 'se', 'quando', 'onde', 'porque', 'porquê'];
+
+        const words = text.split(/\s+/).filter(w => {
+            const clean = w.toLowerCase().replace(/[^a-záàâãéèêíïóôõöúçñ]/gi, '');
+            return clean.length > 2 && !stopWords.includes(clean);
+        });
+
+        if (words.length > 0) {
+            // Retorna as primeiras 3 palavras significativas
+            return words.slice(0, 3).join(' ');
+        }
+
+        return null;
+    }
 
     // Simulated Response Generator
     function getMockResponse(prompt) {
@@ -789,12 +915,9 @@ Deseja que eu te sugira leituras ou documentações específicas para iniciar a 
 
     // --- Azure OpenAI API Requester ---
     async function fetchAzureOpenAI(prompt) {
-        // Envia a requisição para a rota servidora local /api/chat que atua como proxy
         const response = await fetch('/api/chat', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 messages: conversationHistory,
                 systemPrompt: appState.azureSystemPrompt,
@@ -807,13 +930,16 @@ Deseja que eu te sugira leituras ou documentações específicas para iniciar a 
         });
 
         if (!response.ok) {
-            const errData = await response.json();
+            const errData = await response.json().catch(() => ({}));
             throw new Error(errData.error || `Erro do Servidor Vercel: ${response.status}`);
         }
 
         const data = await response.json();
         if (data.choices && data.choices[0] && data.choices[0].message) {
-            return data.choices[0].message.content;
+            return {
+                text: data.choices[0].message.content,
+                imageUrl: data.imageUrl || null
+            };
         } else {
             throw new Error("Resposta recebida do backend em formato inesperado (sem escolhas).");
         }
