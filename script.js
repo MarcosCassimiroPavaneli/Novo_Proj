@@ -31,6 +31,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const azureEndpoint = document.getElementById('azure-endpoint');
     const azureKey = document.getElementById('azure-key');
     const azureDeployment = document.getElementById('azure-deployment');
+    const azureSystemPrompt = document.getElementById('azure-system-prompt');
+    const azureTemperature = document.getElementById('azure-temperature');
+    const azureTopP = document.getElementById('azure-top-p');
     const btnSaveSettings = document.getElementById('btn-save-settings');
     const btnCancelSettings = document.getElementById('btn-cancel-settings');
     const settingsTabs = document.querySelectorAll('.settings-tabs .tab-btn');
@@ -44,13 +47,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // State
     let appState = {
         userName: 'Marcos',
-        aiProvider: 'simulated',
-        azureEndpoint: '',
+        aiProvider: 'azure', // Padrão agora é Azure
+        azureEndpoint: 'https://marcosprojresource.openai.azure.com/openai/v1',
         azureKey: '',
-        azureDeployment: 'gpt-4',
+        azureDeployment: 'gpt-4.1',
+        azureSystemPrompt: 'Você é um assistente virtual útil integrado ao Azure OpenAI. Responda de forma concisa.',
+        azureTemperature: 0.7,
+        azureTopP: 0.9,
         selectedTheme: 'theme-default',
         activityLogs: []
     };
+
+    // Histórico de Conversa
+    let conversationHistory = [];
 
     // Toggle Sidebar on Desktop
     btnMenu.addEventListener('click', () => {
@@ -94,6 +103,7 @@ document.addEventListener('DOMContentLoaded', () => {
         chatInput.style.height = '24px';
         btnSend.classList.add('disabled');
         btnSend.disabled = true;
+        conversationHistory = [];
     });
 
     // Suggestion Cards click
@@ -132,6 +142,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Add user message to UI
         appendUserMessage(text);
+        conversationHistory.push({ role: 'user', content: text });
 
         // Add recent item dynamically
         addRecentChatItem(text);
@@ -275,6 +286,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         revealNextElement();
         scrollToBottom();
+        conversationHistory.push({ role: 'assistant', content: markdownText });
     }
 
     function scrollToBottom() {
@@ -529,12 +541,21 @@ Deseja que eu te sugira leituras ou documentações específicas para iniciar a 
         // Load Provider
         if (localStorage.getItem('aiProvider')) {
             appState.aiProvider = localStorage.getItem('aiProvider');
+        } else {
+            appState.aiProvider = 'azure'; // Padrão é Azure
         }
         
         // Load Azure config
-        appState.azureEndpoint = localStorage.getItem('azureEndpoint') || '';
+        appState.azureEndpoint = localStorage.getItem('azureEndpoint') || 'https://marcosprojresource.openai.azure.com/openai/v1';
         appState.azureKey = localStorage.getItem('azureKey') || '';
-        appState.azureDeployment = localStorage.getItem('azureDeployment') || 'gpt-4';
+        appState.azureDeployment = localStorage.getItem('azureDeployment') || 'gpt-4.1';
+        appState.azureSystemPrompt = localStorage.getItem('azureSystemPrompt') || 'Você é um assistente virtual útil integrado ao Azure OpenAI. Responda de forma concisa.';
+        
+        const storedTemp = localStorage.getItem('azureTemperature');
+        appState.azureTemperature = storedTemp !== null ? parseFloat(storedTemp) : 0.7;
+        
+        const storedTopP = localStorage.getItem('azureTopP');
+        appState.azureTopP = storedTopP !== null ? parseFloat(storedTopP) : 0.9;
         
         // Load Theme
         if (localStorage.getItem('selectedTheme')) {
@@ -576,6 +597,9 @@ Deseja que eu te sugira leituras ou documentações específicas para iniciar a 
         azureEndpoint.value = appState.azureEndpoint;
         azureKey.value = appState.azureKey;
         azureDeployment.value = appState.azureDeployment;
+        azureSystemPrompt.value = appState.azureSystemPrompt;
+        azureTemperature.value = appState.azureTemperature;
+        azureTopP.value = appState.azureTopP;
 
         // Apply theme to body
         document.body.className = '';
@@ -693,9 +717,12 @@ Deseja que eu te sugira leituras ou documentações específicas para iniciar a 
         // Save values to state
         appState.userName = settingsUsername.value.trim() || 'Marcos';
         appState.aiProvider = settingsProvider.value;
-        appState.azureEndpoint = azureEndpoint.value.trim();
-        appState.azureKey = azureKey.value.trim();
-        appState.azureDeployment = azureDeployment.value.trim() || 'gpt-4';
+        appState.azureEndpoint = azureEndpoint.value.trim() || 'https://marcosprojresource.openai.azure.com/openai/v1';
+        appState.azureKey = azureKey.value.trim() || '';
+        appState.azureDeployment = azureDeployment.value.trim() || 'gpt-4.1';
+        appState.azureSystemPrompt = azureSystemPrompt.value.trim() || 'Você é um assistente virtual útil integrado ao Azure OpenAI. Responda de forma concisa.';
+        appState.azureTemperature = parseFloat(azureTemperature.value) || 0.7;
+        appState.azureTopP = parseFloat(azureTopP.value) || 0.9;
         
         // Find active theme option
         const activeThemeOpt = document.querySelector('.theme-option.active');
@@ -707,6 +734,9 @@ Deseja que eu te sugira leituras ou documentações específicas para iniciar a 
         localStorage.setItem('azureEndpoint', appState.azureEndpoint);
         localStorage.setItem('azureKey', appState.azureKey);
         localStorage.setItem('azureDeployment', appState.azureDeployment);
+        localStorage.setItem('azureSystemPrompt', appState.azureSystemPrompt);
+        localStorage.setItem('azureTemperature', appState.azureTemperature);
+        localStorage.setItem('azureTopP', appState.azureTopP);
         localStorage.setItem('selectedTheme', appState.selectedTheme);
 
         logActivity('Configurações atualizadas e salvas com sucesso.');
@@ -759,42 +789,33 @@ Deseja que eu te sugira leituras ou documentações específicas para iniciar a 
 
     // --- Azure OpenAI API Requester ---
     async function fetchAzureOpenAI(prompt) {
-        const endpoint = appState.azureEndpoint.replace(/\/$/, ""); // Trim trailing slash
-        const key = appState.azureKey;
-        const deployment = appState.azureDeployment;
-
-        if (!endpoint || !key || !deployment) {
-            throw new Error("Configurações da Azure OpenAI incompletas. Preencha Endpoint, Chave API e Modelo nas Configurações.");
-        }
-
-        const url = `${endpoint}/openai/deployments/${deployment}/chat/completions?api-version=2023-05-15`;
-        
-        const response = await fetch(url, {
+        // Envia a requisição para a rota servidora local /api/chat que atua como proxy
+        const response = await fetch('/api/chat', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'api-key': key
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                messages: [
-                    { role: 'system', content: 'Você é um assistente útil.' },
-                    { role: 'user', content: prompt }
-                ],
-                max_tokens: 800,
-                temperature: 0.7
+                messages: conversationHistory,
+                systemPrompt: appState.azureSystemPrompt,
+                temperature: appState.azureTemperature,
+                topP: appState.azureTopP,
+                endpoint: appState.azureEndpoint,
+                apiKey: appState.azureKey,
+                deployment: appState.azureDeployment
             })
         });
 
         if (!response.ok) {
-            const errBody = await response.text();
-            throw new Error(`Erro na API Azure: ${response.status} - ${response.statusText}. Detalhe: ${errBody}`);
+            const errData = await response.json();
+            throw new Error(errData.error || `Erro do Servidor Vercel: ${response.status}`);
         }
 
         const data = await response.json();
         if (data.choices && data.choices[0] && data.choices[0].message) {
             return data.choices[0].message.content;
         } else {
-            throw new Error("Resposta recebida da Azure em formato inesperado (sem escolhas válidas).");
+            throw new Error("Resposta recebida do backend em formato inesperado (sem escolhas).");
         }
     }
 

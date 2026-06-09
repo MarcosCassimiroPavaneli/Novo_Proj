@@ -218,6 +218,23 @@
                         <input type="text" id="azure-deployment" placeholder="gpt-4" value="gpt-4">
                         <p class="setting-hint">Nome da implantação do modelo (Ex: gpt-4, gpt-35-turbo).</p>
                     </div>
+                    <div class="setting-group">
+                        <label for="azure-system-prompt">Instruções do Sistema (System Prompt)</label>
+                        <textarea id="azure-system-prompt" rows="3" style="background-color: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); padding: 10px 14px; border-radius: 8px; font-family: var(--font-chat); font-size: 14px; outline: none; transition: border-color 0.2s; width: 100%; resize: vertical;" placeholder="Você é um assistente virtual útil integrado ao Azure OpenAI."></textarea>
+                        <p class="setting-hint">Define a personalidade e comportamento do assistente.</p>
+                    </div>
+                    <div class="setting-group" style="flex-direction: row; gap: 16px; margin-bottom: 0;">
+                        <div style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
+                            <label for="azure-temperature">Temperatura</label>
+                            <input type="number" id="azure-temperature" min="0" max="2" step="0.1" value="0.7">
+                            <p class="setting-hint">Criatividade (0 a 2).</p>
+                        </div>
+                        <div style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
+                            <label for="azure-top-p">Top-P</label>
+                            <input type="number" id="azure-top-p" min="0" max="1" step="0.05" value="0.9">
+                            <p class="setting-hint">Amostragem (0 a 1).</p>
+                        </div>
+                    </div>
                 </div>
                 
                 <div class="tab-content" id="tab-theme">
