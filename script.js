@@ -13,6 +13,44 @@ document.addEventListener('DOMContentLoaded', () => {
     const messagesContainer = document.getElementById('messages-container');
     const suggestionCards = document.querySelectorAll('.suggestion-card');
     const recentList = document.getElementById('recent-list');
+    const userAvatar = document.getElementById('user-avatar');
+
+    // Modals DOM Elements
+    const modalSettings = document.getElementById('modal-settings');
+    const modalHelp = document.getElementById('modal-help');
+    const modalActivity = document.getElementById('modal-activity');
+    
+    // Sidebar Modal Buttons
+    const btnSettings = document.getElementById('btn-settings');
+    const btnHelp = document.getElementById('btn-help');
+    const btnActivity = document.getElementById('btn-activity');
+
+    // Settings Modal Inputs & Tab Buttons
+    const settingsUsername = document.getElementById('settings-username');
+    const settingsProvider = document.getElementById('settings-provider');
+    const azureEndpoint = document.getElementById('azure-endpoint');
+    const azureKey = document.getElementById('azure-key');
+    const azureDeployment = document.getElementById('azure-deployment');
+    const btnSaveSettings = document.getElementById('btn-save-settings');
+    const btnCancelSettings = document.getElementById('btn-cancel-settings');
+    const settingsTabs = document.querySelectorAll('.settings-tabs .tab-btn');
+    const settingsTabContents = document.querySelectorAll('.modal-body .tab-content');
+    const themeOptions = document.querySelectorAll('.theme-option');
+
+    // Activity Log DOM
+    const activityLogList = document.getElementById('activity-log-list');
+    const btnClearActivity = document.getElementById('btn-clear-activity');
+
+    // State
+    let appState = {
+        userName: 'Marcos',
+        aiProvider: 'simulated',
+        azureEndpoint: '',
+        azureKey: '',
+        azureDeployment: 'gpt-4',
+        selectedTheme: 'theme-default',
+        activityLogs: []
+    };
 
     // Toggle Sidebar on Desktop
     btnMenu.addEventListener('click', () => {
@@ -82,7 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btnSend.addEventListener('click', sendMessage);
 
     // Send Message Lógica
-    function sendMessage() {
+    async function sendMessage() {
         const text = chatInput.value.trim();
         if (text === '') return;
 
@@ -97,6 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Add recent item dynamically
         addRecentChatItem(text);
+        logActivity(`Mensagem enviada pelo usuário: "${text.substring(0, 30)}..."`);
 
         // Clear input and reset textarea height
         chatInput.value = '';
@@ -108,12 +147,28 @@ document.addEventListener('DOMContentLoaded', () => {
         const loadingId = appendBotShimmer();
         scrollToBottom();
 
-        // Simulate API call to Azure
-        setTimeout(() => {
-            removeBotShimmer(loadingId);
-            const responseText = getMockResponse(text);
-            appendBotMessageWithTyping(responseText);
-        }, 1500);
+        if (appState.aiProvider === 'azure') {
+            logActivity(`Iniciando chamada para a Azure OpenAI (${appState.azureDeployment})...`);
+            try {
+                const responseText = await fetchAzureOpenAI(text);
+                removeBotShimmer(loadingId);
+                appendBotMessageWithTyping(responseText);
+                logActivity(`Resposta recebida com sucesso da Azure OpenAI.`);
+            } catch (error) {
+                removeBotShimmer(loadingId);
+                const errorMessage = `**Erro ao conectar com o recurso do Azure OpenAI:**\n\n- Detalhe: ${error.message}\n\n*Nota: Chamadas diretas do navegador para a Azure podem ser bloqueadas por política de CORS. Para uso em produção, recomenda-se criar uma rota serverless no Vercel (como explicado no menu de ajuda).* \n\n**Retornando resposta simulada (fallback):**\n\n${getMockResponse(text)}`;
+                appendBotMessageWithTyping(errorMessage);
+                logActivity(`Falha na chamada da Azure: ${error.message}. Fallback simulado ativo.`);
+            }
+        } else {
+            // Simulate API call to Azure (Fallback)
+            setTimeout(() => {
+                removeBotShimmer(loadingId);
+                const responseText = getMockResponse(text);
+                appendBotMessageWithTyping(responseText);
+                logActivity(`Resposta simulada gerada com sucesso.`);
+            }, 1200);
+        }
     }
 
     function appendUserMessage(text) {
@@ -462,14 +517,287 @@ export default async function handler(req, res) {
 Deseja que eu te sugira leituras ou documentações específicas para iniciar a **Semana 1**?`;
         }
 
-        // Default Simulated Response
-        return `Entendi perfeitamente sua solicitação! Esta interface frontend é um protótipo idêntico ao **Gemini Advanced** com tema escuro e está funcionando atualmente em modo de simulação.
-
-Como seu objetivo final é criar o chatbot conectado à **Azure** hospedado no Vercel, o caminho técnico recomendado a seguir será:
-- **1. Criar sua Rota de API no Vercel:** Escrever um arquivo de rota de API (ex: \`api/chat.js\`) para receber a mensagem do usuário e encaminhar para a Azure.
-- **2. Integrar com Azure OpenAI:** Adquirir as credenciais do Azure OpenAI Service no portal da Microsoft (Azure Endpoint, Chave API e nome da implantação).
-- **3. Atualizar o script.js:** Modificar a função \`sendMessage()\` para enviar os dados reais via \`fetch('/api/chat')\` em vez de retornar esta resposta simulada.
-
-Gostaria de ver o código-fonte sugerido para essa rota de API no Vercel para você adicionar ao projeto?`;
     }
+
+    // --- State and LocalStorage Manager ---
+    function initAppState() {
+        // Load Username
+        if (localStorage.getItem('userName')) {
+            appState.userName = localStorage.getItem('userName');
+        }
+        
+        // Load Provider
+        if (localStorage.getItem('aiProvider')) {
+            appState.aiProvider = localStorage.getItem('aiProvider');
+        }
+        
+        // Load Azure config
+        appState.azureEndpoint = localStorage.getItem('azureEndpoint') || '';
+        appState.azureKey = localStorage.getItem('azureKey') || '';
+        appState.azureDeployment = localStorage.getItem('azureDeployment') || 'gpt-4';
+        
+        // Load Theme
+        if (localStorage.getItem('selectedTheme')) {
+            appState.selectedTheme = localStorage.getItem('selectedTheme');
+        }
+
+        // Load Activity logs
+        if (localStorage.getItem('activityLogs')) {
+            try {
+                appState.activityLogs = JSON.parse(localStorage.getItem('activityLogs'));
+            } catch(e) {
+                appState.activityLogs = [];
+            }
+        } else {
+            appState.activityLogs = [{
+                time: new Date().toLocaleTimeString(),
+                message: 'Sessão iniciada e conectada ao GitHub / Vercel.'
+            }];
+        }
+
+        // Apply UI state
+        applyUIState();
+    }
+
+    function applyUIState() {
+        // Update username in greeting
+        const greetingSpan = welcomeScreen.querySelector('.welcome-header h1 span');
+        if (greetingSpan) {
+            greetingSpan.textContent = appState.userName;
+        }
+
+        // Update username in inputs
+        settingsUsername.value = appState.userName;
+
+        // Update provider select
+        settingsProvider.value = appState.aiProvider;
+
+        // Update Azure inputs
+        azureEndpoint.value = appState.azureEndpoint;
+        azureKey.value = appState.azureKey;
+        azureDeployment.value = appState.azureDeployment;
+
+        // Apply theme to body
+        document.body.className = '';
+        if (appState.selectedTheme !== 'theme-default') {
+            document.body.classList.add(appState.selectedTheme);
+        }
+
+        // Update theme options active class
+        themeOptions.forEach(opt => {
+            opt.classList.remove('active');
+            if (opt.getAttribute('data-theme') === appState.selectedTheme) {
+                opt.classList.add('active');
+            }
+        });
+
+        // Update user avatar initials
+        if (appState.userName) {
+            const initials = appState.userName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+            userAvatar.textContent = initials || 'MC';
+            userAvatar.title = appState.userName;
+        }
+
+        // Render activity logs
+        renderActivityLogs();
+    }
+
+    // --- Modals Controller ---
+    function openModal(modal) {
+        modal.style.display = 'flex';
+        // Trigger reflow for transition
+        modal.offsetHeight;
+        modal.classList.add('active');
+        logActivity(`Modal aberto: ${modal.id.replace('modal-', '')}`);
+    }
+
+    function closeModal(modal) {
+        modal.classList.remove('active');
+        setTimeout(() => {
+            modal.style.display = 'none';
+        }, 200);
+    }
+
+    // Sidebar buttons click listeners
+    btnSettings.addEventListener('click', () => openModal(modalSettings));
+    btnHelp.addEventListener('click', () => openModal(modalHelp));
+    btnActivity.addEventListener('click', () => {
+        renderActivityLogs();
+        openModal(modalActivity);
+    });
+    userAvatar.addEventListener('click', () => openModal(modalSettings));
+
+    // Close buttons event listeners
+    const closeButtons = document.querySelectorAll('.btn-close-modal, .btn-close-modal-footer');
+    closeButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const openModalOverlay = btn.closest('.modal-overlay');
+            if (openModalOverlay) {
+                closeModal(openModalOverlay);
+            }
+        });
+    });
+
+    // Close on overlay backdrop click
+    const modalOverlays = document.querySelectorAll('.modal-overlay');
+    modalOverlays.forEach(overlay => {
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                closeModal(overlay);
+            }
+        });
+    });
+
+    // Settings Tabs switching logic
+    settingsTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            settingsTabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            
+            const targetContentId = tab.getAttribute('data-tab');
+            settingsTabContents.forEach(content => {
+                content.classList.remove('active');
+                if (content.id === targetContentId) {
+                    content.classList.add('active');
+                }
+            });
+        });
+    });
+
+    // Theme Selection click
+    themeOptions.forEach(opt => {
+        opt.addEventListener('click', () => {
+            themeOptions.forEach(o => o.classList.remove('active'));
+            opt.classList.add('active');
+            const newTheme = opt.getAttribute('data-theme');
+            
+            // Preview immediately
+            document.body.className = '';
+            if (newTheme !== 'theme-default') {
+                document.body.classList.add(newTheme);
+            }
+        });
+    });
+
+    // Settings actions (Save and Cancel)
+    btnCancelSettings.addEventListener('click', () => {
+        // Reset theme changes to saved state
+        document.body.className = '';
+        if (appState.selectedTheme !== 'theme-default') {
+            document.body.classList.add(appState.selectedTheme);
+        }
+        closeModal(modalSettings);
+    });
+
+    btnSaveSettings.addEventListener('click', () => {
+        // Save values to state
+        appState.userName = settingsUsername.value.trim() || 'Marcos';
+        appState.aiProvider = settingsProvider.value;
+        appState.azureEndpoint = azureEndpoint.value.trim();
+        appState.azureKey = azureKey.value.trim();
+        appState.azureDeployment = azureDeployment.value.trim() || 'gpt-4';
+        
+        // Find active theme option
+        const activeThemeOpt = document.querySelector('.theme-option.active');
+        appState.selectedTheme = activeThemeOpt ? activeThemeOpt.getAttribute('data-theme') : 'theme-default';
+
+        // Persist to localStorage
+        localStorage.setItem('userName', appState.userName);
+        localStorage.setItem('aiProvider', appState.aiProvider);
+        localStorage.setItem('azureEndpoint', appState.azureEndpoint);
+        localStorage.setItem('azureKey', appState.azureKey);
+        localStorage.setItem('azureDeployment', appState.azureDeployment);
+        localStorage.setItem('selectedTheme', appState.selectedTheme);
+
+        logActivity('Configurações atualizadas e salvas com sucesso.');
+        
+        // Reapply settings to update UI
+        applyUIState();
+        closeModal(modalSettings);
+    });
+
+    // --- Activity Log Helper ---
+    function logActivity(message) {
+        const newLog = {
+            time: new Date().toLocaleTimeString(),
+            message: message
+        };
+        appState.activityLogs.unshift(newLog); // Prepend log
+
+        // Limit to 50 logs
+        if (appState.activityLogs.length > 50) {
+            appState.activityLogs.pop();
+        }
+
+        localStorage.setItem('activityLogs', JSON.stringify(appState.activityLogs));
+        renderActivityLogs();
+    }
+
+    function renderActivityLogs() {
+        if (!activityLogList) return;
+        activityLogList.innerHTML = '';
+        
+        appState.activityLogs.forEach(log => {
+            const logItem = document.createElement('div');
+            logItem.className = 'activity-log-item';
+            logItem.innerHTML = `
+                <span class="log-time">${log.time}</span>
+                <p class="log-message">${escapeHTML(log.message)}</p>
+            `;
+            activityLogList.appendChild(logItem);
+        });
+    }
+
+    btnClearActivity.addEventListener('click', () => {
+        appState.activityLogs = [{
+            time: new Date().toLocaleTimeString(),
+            message: 'Histórico de atividade limpo.'
+        }];
+        localStorage.setItem('activityLogs', JSON.stringify(appState.activityLogs));
+        renderActivityLogs();
+    });
+
+    // --- Azure OpenAI API Requester ---
+    async function fetchAzureOpenAI(prompt) {
+        const endpoint = appState.azureEndpoint.replace(/\/$/, ""); // Trim trailing slash
+        const key = appState.azureKey;
+        const deployment = appState.azureDeployment;
+
+        if (!endpoint || !key || !deployment) {
+            throw new Error("Configurações da Azure OpenAI incompletas. Preencha Endpoint, Chave API e Modelo nas Configurações.");
+        }
+
+        const url = `${endpoint}/openai/deployments/${deployment}/chat/completions?api-version=2023-05-15`;
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'api-key': key
+            },
+            body: JSON.stringify({
+                messages: [
+                    { role: 'system', content: 'Você é um assistente útil.' },
+                    { role: 'user', content: prompt }
+                ],
+                max_tokens: 800,
+                temperature: 0.7
+            })
+        });
+
+        if (!response.ok) {
+            const errBody = await response.text();
+            throw new Error(`Erro na API Azure: ${response.status} - ${response.statusText}. Detalhe: ${errBody}`);
+        }
+
+        const data = await response.json();
+        if (data.choices && data.choices[0] && data.choices[0].message) {
+            return data.choices[0].message.content;
+        } else {
+            throw new Error("Resposta recebida da Azure em formato inesperado (sem escolhas válidas).");
+        }
+    }
+
+    // Run Initialization
+    initAppState();
 });

@@ -42,15 +42,15 @@
             </div>
 
             <div class="sidebar-bottom">
-                <div class="nav-item" title="Ajuda">
+                <div class="nav-item" id="btn-help" title="Ajuda">
                     <span class="material-symbols-outlined">help</span>
                     <span class="nav-text">Ajuda</span>
                 </div>
-                <div class="nav-item" title="Atividade">
+                <div class="nav-item" id="btn-activity" title="Atividade">
                     <span class="material-symbols-outlined">history</span>
                     <span class="nav-text">Atividade</span>
                 </div>
-                <div class="nav-item" title="Configurações">
+                <div class="nav-item" id="btn-settings" title="Configurações">
                     <span class="material-symbols-outlined">settings</span>
                     <span class="nav-text">Configurações</span>
                 </div>
@@ -167,6 +167,147 @@
                 </div>
             </footer>
         </main>
+    </div>
+
+    <!-- Modals System -->
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="modal-settings">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2>Configurações do Assistente</h2>
+                <button class="btn-icon btn-close-modal" title="Fechar">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="settings-tabs">
+                    <button class="tab-btn active" data-tab="tab-general">Geral</button>
+                    <button class="tab-btn" data-tab="tab-azure">Conexão Azure</button>
+                    <button class="tab-btn" data-tab="tab-theme">Aparência</button>
+                </div>
+                
+                <div class="tab-content active" id="tab-general">
+                    <div class="setting-group">
+                        <label for="settings-username">Nome do Usuário</label>
+                        <input type="text" id="settings-username" value="Marcos" placeholder="Seu nome...">
+                        <p class="setting-hint">Como o assistente irá se referir a você na tela de boas-vindas.</p>
+                    </div>
+                    <div class="setting-group">
+                        <label for="settings-provider">Provedor de Respostas</label>
+                        <select id="settings-provider">
+                            <option value="simulated">Respostas Simuladas (Local)</option>
+                            <option value="azure">Conectar na Azure OpenAI</option>
+                        </select>
+                        <p class="setting-hint">Altere para Azure para configurar chaves de produção.</p>
+                    </div>
+                </div>
+                
+                <div class="tab-content" id="tab-azure">
+                    <div class="setting-group">
+                        <label for="azure-endpoint">Azure Endpoint URL</label>
+                        <input type="text" id="azure-endpoint" placeholder="https://seu-recurso.openai.azure.com/">
+                        <p class="setting-hint">URL de endpoint do recurso do Azure OpenAI.</p>
+                    </div>
+                    <div class="setting-group">
+                        <label for="azure-key">Chave de API (Azure API Key)</label>
+                        <input type="password" id="azure-key" placeholder="Insira sua chave secreta aqui...">
+                        <p class="setting-hint">Chave de acesso secreta do portal Azure.</p>
+                    </div>
+                    <div class="setting-group">
+                        <label for="azure-deployment">Nome do Modelo (Deployment Name)</label>
+                        <input type="text" id="azure-deployment" placeholder="gpt-4" value="gpt-4">
+                        <p class="setting-hint">Nome da implantação do modelo (Ex: gpt-4, gpt-35-turbo).</p>
+                    </div>
+                </div>
+                
+                <div class="tab-content" id="tab-theme">
+                    <div class="setting-group">
+                        <label>Esquema de Cores do Gradiente</label>
+                        <div class="theme-options-grid">
+                            <div class="theme-option active" data-theme="theme-default">
+                                <div class="theme-preview" style="background: linear-gradient(135deg, #4285f4, #9b72cb, #d96570);"></div>
+                                <span>Padrão Gemini</span>
+                            </div>
+                            <div class="theme-option" data-theme="theme-sapphire">
+                                <div class="theme-preview" style="background: linear-gradient(135deg, #2a5298, #609df8);"></div>
+                                <span>Azul Safira</span>
+                            </div>
+                            <div class="theme-option" data-theme="theme-emerald">
+                                <div class="theme-preview" style="background: linear-gradient(135deg, #0ba360, #0df094);"></div>
+                                <span>Esmeralda</span>
+                            </div>
+                            <div class="theme-option" data-theme="theme-ruby">
+                                <div class="theme-preview" style="background: linear-gradient(135deg, #cb2d3e, #ef473a);"></div>
+                                <span>Rubi</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-cancel" id="btn-cancel-settings">Cancelar</button>
+                <button class="btn-save" id="btn-save-settings">Salvar Alterações</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Help Modal -->
+    <div class="modal-overlay" id="modal-help">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2>Central de Ajuda</h2>
+                <button class="btn-icon btn-close-modal" title="Fechar">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="help-section">
+                    <h3>Como este projeto funciona?</h3>
+                    <p>Este site é uma interface frontend clone do Gemini Advanced que foi criada para o seu projeto pessoal de inteligência artificial. Atualmente ela está configurada com respostas simuladas rápidas, mas já possui total suporte para se conectar diretamente com recursos do <strong>Azure OpenAI</strong>.</p>
+                </div>
+                <div class="help-section" style="margin-top: 20px;">
+                    <h3>Dicas de Atalhos</h3>
+                    <ul>
+                        <li><strong>Enter:</strong> Envia a mensagem digitada.</li>
+                        <li><strong>Shift + Enter:</strong> Insere uma nova linha na caixa de mensagem.</li>
+                        <li><strong>Botão de Nova Conversa:</strong> Limpa a tela e reseta o histórico de mensagens.</li>
+                    </ul>
+                </div>
+                <div class="help-section" style="margin-top: 20px;">
+                    <h3>Sobre o Deploy</h3>
+                    <p>O repositório está linkado no GitHub e publicado diretamente no Vercel. Qualquer alteração empurrada com <code>git push</code> atualizará o site em produção instantaneamente.</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-save btn-close-modal-footer">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Activity Modal -->
+    <div class="modal-overlay" id="modal-activity">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2>Minha Atividade</h2>
+                <button class="btn-icon btn-close-modal" title="Fechar">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="settings-hint" style="margin-bottom: 16px;">Aqui estão registrados os últimos eventos e chamadas efetuadas localmente no seu navegador:</p>
+                <div class="activity-log-list" id="activity-log-list">
+                    <!-- Logs will be inserted dynamically -->
+                    <div class="activity-log-item">
+                        <span class="log-time">Agora mesmo</span>
+                        <p class="log-message">Sessão iniciada e conectada ao GitHub / Vercel.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-cancel" id="btn-clear-activity">Limpar Histórico</button>
+                <button class="btn-save btn-close-modal-footer">Fechar</button>
+            </div>
+        </div>
     </div>
 
     <script src="script.js"></script>
